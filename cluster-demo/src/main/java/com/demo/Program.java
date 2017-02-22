@@ -1,5 +1,7 @@
 package com.demo;
 
+import javax.servlet.jsp.jstl.core.Config;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -15,6 +17,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 import com.demo.mapreduce.DocCounts;
+import com.demo.mapreduce.TfCounts;
+import com.demo.mapreduce.TfCounts.TfCountsMapper;
+import com.demo.mapreduce.TfCounts.TfCountsReducer;
 import com.demo.mapreduce.DocCounts.DocCountsCombiner;
 import com.demo.mapreduce.DocCounts.DocCountsMapper;
 import com.demo.mapreduce.DocCounts.DocCountsReducer;
@@ -44,6 +49,7 @@ public class Program {
 		String tmpPath = args[2];
 		Path docCountPath = new Path(tmpPath + "/0-doc-count");		//文档总数路径
 		Path wordCountInDocPath = new  Path(tmpPath + "/1-word-count-in-doc");	//单词在文档中出现次数
+		Path wordTfPath = new Path(tmpPath + "/2-word-tf");		//每篇文档中单词tf路径
 		
 		//删除输出目录
 		if(fs.exists(outputPath)) {
@@ -56,6 +62,9 @@ public class Program {
 		}
 		if(fs.exists(wordCountInDocPath)) {
 			fs.delete(wordCountInDocPath, true);
+		}
+		if(fs.exists(wordTfPath)) {
+			fs.delete(wordTfPath, true);
 		}
 		
 		//1、计算文档总数
@@ -90,6 +99,29 @@ public class Program {
 		countWordInDocJob.setOutputFormatClass(TextOutputFormat.class);
 		FileInputFormat.addInputPath(countWordInDocJob, inputPath);
 		FileOutputFormat.setOutputPath(countWordInDocJob, wordCountInDocPath);
-	}
+		
+		countWordInDocJob.waitForCompletion(true);
+		
+		//3、计算文档中每个单词与该文档单词总数的占比
+		Configuration conf3 = new Configuration();
+		Job countWordTfJob = new Job(conf3, "每个单词的tf值");
+		countWordTfJob.setJarByClass(TfCounts.class);
+		countWordTfJob.setMapperClass(TfCountsMapper.class);
+		countWordTfJob.setReducerClass(TfCountsReducer.class);
+		countWordTfJob.setOutputKeyClass(Text.class);
+		countWordTfJob.setOutputValueClass(Text.class);
+		countWordTfJob.setInputFormatClass(TextInputFormat.class);
+		countWordTfJob.setOutputFormatClass(TextOutputFormat.class);
+		FileInputFormat.addInputPath(countWordTfJob, wordCountInDocPath);
+		FileOutputFormat.setOutputPath(countWordTfJob, wordTfPath);
+		
+		countWordTfJob.waitForCompletion(true);
+		
+		//4、计算每个单词在各个文档的tfidf值
+		Configuration conf4 = new Configuration();
+		//从第一步的结果中获取文档总数，放到缓存中
+		String docCountFile = docCountPath + "/part-r-00000"; 
+		//TODO
+}
 
 }
