@@ -33,8 +33,8 @@ public class RecommendDemo {
 
 	public static void main(String[] args) throws Exception  {
 		userBaseRecommender();
-		itemBaseRecommender();
-		cfDemo();
+//		itemBaseRecommender();
+//		cfDemo();
 	}
 	
 	/**

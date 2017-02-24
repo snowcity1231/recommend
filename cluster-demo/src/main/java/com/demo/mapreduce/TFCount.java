@@ -16,7 +16,7 @@ import org.apache.hadoop.mapreduce.Reducer;
 * @date 2017年2月22日 下午2:52:04
 *  
 */
-public class TfCounts {
+public class TFCount {
 
 	public static class TfCountsMapper extends Mapper<LongWritable, Text, Text, Text> {
 		/**
