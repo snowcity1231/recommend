@@ -55,3 +55,10 @@ test-libsvm
 TextCluster
 META-INF\*
 \target
+Alice
+Word2Vec
+Word2Vec_java
+svm-demo
+count-similarity
+word2vec
+word2vec_master

@@ -1,8 +1,10 @@
 package com.demo;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
+import org.apache.mahout.cf.taste.common.TasteException;
 import org.apache.mahout.cf.taste.impl.common.FastByIDMap;
 import org.apache.mahout.cf.taste.impl.common.LongPrimitiveIterator;
 import org.apache.mahout.cf.taste.impl.model.GenericDataModel;
@@ -11,8 +13,10 @@ import org.apache.mahout.cf.taste.impl.model.GenericUserPreferenceArray;
 import org.apache.mahout.cf.taste.impl.model.file.FileDataModel;
 import org.apache.mahout.cf.taste.impl.neighborhood.NearestNUserNeighborhood;
 import org.apache.mahout.cf.taste.impl.recommender.GenericBooleanPrefItemBasedRecommender;
+import org.apache.mahout.cf.taste.impl.recommender.GenericBooleanPrefUserBasedRecommender;
 import org.apache.mahout.cf.taste.impl.recommender.GenericUserBasedRecommender;
 import org.apache.mahout.cf.taste.impl.similarity.EuclideanDistanceSimilarity;
+import org.apache.mahout.cf.taste.impl.similarity.LogLikelihoodSimilarity;
 import org.apache.mahout.cf.taste.impl.similarity.PearsonCorrelationSimilarity;
 import org.apache.mahout.cf.taste.model.DataModel;
 import org.apache.mahout.cf.taste.model.PreferenceArray;
@@ -32,9 +36,10 @@ import org.apache.mahout.cf.taste.similarity.UserSimilarity;
 public class RecommendDemo {
 
 	public static void main(String[] args) throws Exception  {
-		userBaseRecommender();
+//		userBaseRecommender();
 //		itemBaseRecommender();
 //		cfDemo();
+		userCfBasedBoolean();
 	}
 	
 	/**
@@ -140,5 +145,36 @@ public class RecommendDemo {
 			}
 			System.out.println();
 		}
+	}
+	
+	/**
+	 * 基于布尔类型的喜好
+	 * @throws TasteException
+	 * @throws IOException
+	 */
+	public static void userCfBasedBoolean() throws TasteException, IOException {
+		DataModel dataModel = new FileDataModel(new File("data_nopref.csv"));
+		 
+        //用户相识度 ：皮尔森相关性相视度
+        //UserSimilarity sim = new PearsonCorrelationSimilarity(model);
+ 
+        //用户相识度 ：欧式距离
+        UserSimilarity sim = new LogLikelihoodSimilarity(dataModel);
+ 
+        // 最近邻算法
+        UserNeighborhood nbh = new NearestNUserNeighborhood(2, sim, dataModel);
+ 
+        // 生成推荐引擎  : 基于用户的协同过滤算法， 
+        //还有基于物品的过滤算法，mahout 下面已经有很多实现
+        //Recommender rec = new GenericUserBasedRecommender(model, nbh, sim);  
+ 
+        Recommender rec = new GenericBooleanPrefUserBasedRecommender(dataModel, nbh, sim);
+ 
+        // 为用户ID(1)推荐物品(数量2个)  
+        List<RecommendedItem> recItemList = rec.recommend(1, 3);
+ 
+        for (RecommendedItem item : recItemList) {
+            System.out.println(item);
+        }
 	}
 }
