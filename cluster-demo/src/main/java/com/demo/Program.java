@@ -5,6 +5,7 @@ import javax.servlet.jsp.jstl.core.Config;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
@@ -20,18 +21,26 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 import com.demo.mapreduce.DocCounts;
+import com.demo.mapreduce.GenerateDocVectors;
 import com.demo.mapreduce.TFCount;
 import com.demo.mapreduce.TFCount.TfCountsMapper;
 import com.demo.mapreduce.TFCount.TfCountsReducer;
 import com.demo.mapreduce.TFIDFCount.TFIDFCountMapper;
 import com.demo.mapreduce.TFIDFCount.TFIDFCountReducer;
 import com.demo.mapreduce.TFIDFCount;
+import com.demo.mapreduce.VocabularySelector;
+import com.demo.mapreduce.VocabularySelector.VocabularyCombine;
+import com.demo.mapreduce.VocabularySelector.VocabularyMapper;
+import com.demo.mapreduce.VocabularySelector.VocabularyReducer;
 import com.demo.mapreduce.DocCounts.DocCountsCombiner;
 import com.demo.mapreduce.DocCounts.DocCountsMapper;
 import com.demo.mapreduce.DocCounts.DocCountsReducer;
+import com.demo.mapreduce.GenerateDocVectors.DocVectorReducer;
+import com.demo.mapreduce.GenerateDocVectors.DocVectorsMapper;
 import com.demo.mapreduce.WordCountInDoc;
 import com.demo.mapreduce.WordCountInDoc.WordCountInDocMapper;
 import com.demo.mapreduce.WordCountInDoc.WordCountInDocReducer;
+import com.demo.pojo.DocVector;
 import com.demo.tools.CommonUtils;
 
 /** 
@@ -56,10 +65,12 @@ public class Program {
 		
 		//中间文件目录
 		String tmpPath = args[2];
-		Path docCountPath = new Path(tmpPath + "/0-doc-count");		//文档总数路径
-		Path wordCountInDocPath = new  Path(tmpPath + "/1-word-count-in-doc");	//单词在文档中出现次数
-		Path wordTfPath = new Path(tmpPath + "/2-word-tf");		//每篇文档中单词tf路径
-		Path wordTFIDFPath = new Path(tmpPath + "/3-word-tfidf");	//每篇文档中每个单词的tfidf路径
+		Path docCountPath = new Path(tmpPath + "/1-doc-count");		//文档总数路径
+		Path wordCountInDocPath = new  Path(tmpPath + "/2-word-count-in-doc");	//单词在文档中出现次数
+		Path wordTfPath = new Path(tmpPath + "/3-word-tf");		//每篇文档中单词tf路径
+		Path wordTFIDFPath = new Path(tmpPath + "/4-word-tfidf");	//每篇文档中每个单词的tfidf路径
+		Path vocabularyPath = new Path(tmpPath + "/5-vocabulary");	//存放筛选结束的单词列表文件路径
+		Path docVectorsPath = new Path(tmpPath + "/6-doc-vectors"); 
 		
 		//删除输出目录
 		if(fs.exists(outputPath)) {
@@ -78,6 +89,12 @@ public class Program {
 		}
 		if(fs.exists(wordTFIDFPath)) {
 			fs.delete(wordTFIDFPath, true);
+		}
+		if(fs.exists(vocabularyPath)) {
+			fs.delete(vocabularyPath, true);
+		}
+		if(fs.exists(docVectorsPath)) {
+			fs.delete(docVectorsPath, true);
 		}
 		
 		//1、计算文档总数
@@ -149,7 +166,41 @@ public class Program {
 		countWordTFIDFJob.setOutputFormatClass(TextOutputFormat.class);
 		TextInputFormat.addInputPath(countWordTFIDFJob, wordTfPath);
 		TextOutputFormat.setOutputPath(countWordTFIDFJob, wordTFIDFPath);
-	
-}
+		
+		//5、根据单词的TFIDF值筛选单词，用于生成向量
+		Configuration conf5 = new Configuration();
+		Job vocabularySelectorJob = new Job(conf5, "筛选单词");
+		vocabularySelectorJob.setJarByClass(VocabularySelector.class);
+		vocabularySelectorJob.setInputFormatClass(TextInputFormat.class);
+		vocabularySelectorJob.setMapperClass(VocabularyMapper.class);
+		vocabularySelectorJob.setMapOutputKeyClass(Text.class);
+		vocabularySelectorJob.setMapOutputValueClass(DoubleWritable.class);
+		vocabularySelectorJob.setCombinerClass(VocabularyCombine.class);
+		vocabularySelectorJob.setReducerClass(VocabularyReducer.class);
+		vocabularySelectorJob.setNumReduceTasks(1);
+		vocabularySelectorJob.setOutputKeyClass(Text.class);
+		vocabularySelectorJob.setOutputValueClass(NullWritable.class);
+		vocabularySelectorJob.setOutputFormatClass(TextOutputFormat.class);
+		FileInputFormat.addInputPath(vocabularySelectorJob, wordTFIDFPath);
+		FileOutputFormat.setOutputPath(vocabularySelectorJob, vocabularyPath);
+		
+		//6、生成文档向量
+		Configuration conf6 = new Configuration();
+		Path vocabularyFilePath = new Path(vocabularyPath + "/part-r-00000");
+		//关键词列表文件放到缓存中
+		DistributedCache.addCacheFile(vocabularyFilePath.toUri(), conf6);
+		Job docVectorsJob = new Job(conf6, "生成文档向量");
+		docVectorsJob.setJarByClass(GenerateDocVectors.class);
+		docVectorsJob.setMapperClass(DocVectorsMapper.class);
+		docVectorsJob.setInputFormatClass(TextInputFormat.class);
+		docVectorsJob.setOutputFormatClass(TextOutputFormat.class);
+		docVectorsJob.setMapOutputKeyClass(LongWritable.class);
+		docVectorsJob.setMapOutputValueClass(Text.class);
+		docVectorsJob.setReducerClass(DocVectorReducer.class);
+		docVectorsJob.setOutputKeyClass(NullWritable.class);
+		docVectorsJob.setOutputValueClass(DocVector.class);
+		FileInputFormat.addInputPath(docVectorsJob, wordTFIDFPath);
+		FileOutputFormat.setOutputPath(docVectorsJob, docVectorsPath);
+	}
 
 }
