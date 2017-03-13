@@ -6,7 +6,11 @@ import java.util.List;
 
 import org.apache.mahout.cf.taste.common.TasteException;
 import org.apache.mahout.cf.taste.impl.common.FastByIDMap;
+import org.apache.mahout.cf.taste.impl.common.FastIDSet;
 import org.apache.mahout.cf.taste.impl.common.LongPrimitiveIterator;
+import org.apache.mahout.cf.taste.impl.model.BooleanPreference;
+import org.apache.mahout.cf.taste.impl.model.BooleanUserPreferenceArray;
+import org.apache.mahout.cf.taste.impl.model.GenericBooleanPrefDataModel;
 import org.apache.mahout.cf.taste.impl.model.GenericDataModel;
 import org.apache.mahout.cf.taste.impl.model.GenericPreference;
 import org.apache.mahout.cf.taste.impl.model.GenericUserPreferenceArray;
@@ -39,7 +43,8 @@ public class RecommendDemo {
 //		userBaseRecommender();
 //		itemBaseRecommender();
 //		cfDemo();
-		userCfBasedBoolean();
+//		userCfBasedBoolean();
+		booleanUserCfBasedMemory();
 	}
 	
 	/**
@@ -162,7 +167,16 @@ public class RecommendDemo {
         UserSimilarity sim = new LogLikelihoodSimilarity(dataModel);
  
         // 最近邻算法
-        UserNeighborhood nbh = new NearestNUserNeighborhood(2, sim, dataModel);
+        UserNeighborhood nbh = new NearestNUserNeighborhood(4, sim, dataModel);
+        
+		for(int i=1; i<=5; i++) {
+			long[] ids = nbh.getUserNeighborhood(i);
+			StringBuilder idSb = new StringBuilder();
+			for(long id : ids) {
+				idSb.append(id + "(" + sim.userSimilarity(i, id) + ")" + ",");
+			}
+			System.out.println("用户" + i + "的相邻用户：" + idSb.toString());
+		}
  
         // 生成推荐引擎  : 基于用户的协同过滤算法， 
         //还有基于物品的过滤算法，mahout 下面已经有很多实现
@@ -176,5 +190,67 @@ public class RecommendDemo {
         for (RecommendedItem item : recItemList) {
             System.out.println(item);
         }
+	}
+	
+	/**
+	 * 从内存中读取无偏好数据，计算相邻用户
+	 * @throws TasteException
+	 */
+	public static void booleanUserCfBasedMemory() throws TasteException {
+		//基于程序创建DataModel
+		FastByIDMap<PreferenceArray> preferences = new FastByIDMap<>();
+		//用户1喜欢物品1、2、3
+		PreferenceArray userPref1 = new BooleanUserPreferenceArray(3);
+		userPref1.set(0, new BooleanPreference(1, 101));
+		userPref1.set(1, new BooleanPreference(1, 102));
+		userPref1.set(2, new BooleanPreference(1, 103));
+		// 用户2喜欢物品1、2、3、4 
+		PreferenceArray userPref2 = new BooleanUserPreferenceArray(4);
+		userPref2.set(0, new BooleanPreference(2, 101)); 
+		userPref2.set(1, new BooleanPreference(2, 102)); 
+		userPref2.set(2, new BooleanPreference(2, 103)); 
+		userPref2.set(3, new BooleanPreference(2, 104)); 
+		// 用户3喜欢物品1、4、5、7 
+		PreferenceArray userPref3 = new BooleanUserPreferenceArray(4); 
+		userPref3.set(0, new BooleanPreference(3, 101)); 
+		userPref3.set(1, new BooleanPreference(3, 104)); 
+		userPref3.set(2, new BooleanPreference(3, 105)); 
+		userPref3.set(3, new BooleanPreference(3, 107)); 
+		// 用户4喜欢物品1、3、4、6 
+		PreferenceArray userPref4 = new BooleanUserPreferenceArray(4); 
+		userPref4.set(0, new BooleanPreference(4, 101)); 
+		userPref4.set(1, new BooleanPreference(4, 103));
+		userPref4.set(2, new BooleanPreference(4, 104));
+		userPref4.set(3, new BooleanPreference(4, 106)); 
+		// 用户5喜欢物品1、2、3、4、5、6 
+		PreferenceArray userPref5 = new BooleanUserPreferenceArray(6); 
+		userPref5.set(0, new BooleanPreference(5, 101)); 
+		userPref5.set(1, new BooleanPreference(5, 102)); 
+		userPref5.set(2, new BooleanPreference(5, 103)); 
+		userPref5.set(3, new BooleanPreference(5, 104)); 
+		userPref5.set(4, new BooleanPreference(5, 105)); 
+		userPref5.set(5, new BooleanPreference(5, 106)); 
+		
+		preferences.put(1, userPref1); 
+		preferences.put(2, userPref2); 
+		preferences.put(3, userPref3); 
+		preferences.put(4, userPref4); 
+		preferences.put(5, userPref5); 
+		
+		//构建Datamodel
+		DataModel model = new GenericDataModel(preferences);
+		//基于欧式距离计算用户相似度
+		UserSimilarity similarity = new LogLikelihoodSimilarity(model);
+		//查找最相邻的2个用户
+		UserNeighborhood neighborhood = new NearestNUserNeighborhood(4, similarity, model);
+		for(int i=1; i<=5; i++) {
+			long[] ids = neighborhood.getUserNeighborhood(i);
+			StringBuilder idSb = new StringBuilder();
+			for(long id : ids) {
+				idSb.append(id + "(" + similarity.userSimilarity(i, id) + ")" + ",");
+			}
+			System.out.println("用户" + i + "的相邻用户：" + idSb.toString());
+		}
+		
 	}
 }
