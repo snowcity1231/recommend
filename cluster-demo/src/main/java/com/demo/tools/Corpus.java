@@ -64,9 +64,9 @@ public class Corpus {
 	}
 	
 	/**
-	 * 
+	 * 获取向量维度
 	 * @param path HDFS上初始中心文件的位置
-	 * @return
+	 * @return dimesion 维度？
 	 * @throws IOException
 	 */
 	public static int getDimension(String path) throws IOException {
