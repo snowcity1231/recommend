@@ -14,6 +14,7 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
@@ -37,11 +38,16 @@ import com.demo.mapreduce.DocCounts.DocCountsMapper;
 import com.demo.mapreduce.DocCounts.DocCountsReducer;
 import com.demo.mapreduce.GenerateDocVectors.DocVectorReducer;
 import com.demo.mapreduce.GenerateDocVectors.DocVectorsMapper;
+import com.demo.mapreduce.IdSetGenerator;
+import com.demo.mapreduce.IdSetGenerator.IdSetGeneratorMapper;
+import com.demo.mapreduce.InitialCentersGenerator.CentersMapper;
+import com.demo.mapreduce.InitialCentersGenerator;
 import com.demo.mapreduce.WordCountInDoc;
 import com.demo.mapreduce.WordCountInDoc.WordCountInDocMapper;
 import com.demo.mapreduce.WordCountInDoc.WordCountInDocReducer;
 import com.demo.pojo.DocVector;
 import com.demo.tools.CommonUtils;
+import com.demo.tools.Corpus;
 
 /** 
 * @ClassName: Programe 
@@ -70,7 +76,14 @@ public class Program {
 		Path wordTfPath = new Path(tmpPath + "/3-word-tf");		//每篇文档中单词tf路径
 		Path wordTFIDFPath = new Path(tmpPath + "/4-word-tfidf");	//每篇文档中每个单词的tfidf路径
 		Path vocabularyPath = new Path(tmpPath + "/5-vocabulary");	//存放筛选结束的单词列表文件路径
-		Path docVectorsPath = new Path(tmpPath + "/6-doc-vectors"); 
+		Path docVectorsPath = new Path(tmpPath + "/6-doc-vectors");  //存放文档向量文件路径
+		Path docIdSetPath = new Path(tmpPath + "/7-docid-set");	//文档id集合
+		Path initialCenterPath = new Path(tmpPath + "/8-initial-centers");
+		
+		//生成聚类数
+		final int K = Integer.parseInt(args[3]);
+		//最大迭代次数
+		final int MAX_ITERATIONS = Integer.parseInt(args[4]);
 		
 		//删除输出目录
 		if(fs.exists(outputPath)) {
@@ -95,6 +108,12 @@ public class Program {
 		}
 		if(fs.exists(docVectorsPath)) {
 			fs.delete(docVectorsPath, true);
+		}
+		if(fs.exists(docIdSetPath)) {
+			fs.delete(docIdSetPath, true);
+		}
+		if(fs.exists(initialCenterPath)) {
+			fs.delete(initialCenterPath, true);
 		}
 		
 		//1、计算文档总数
@@ -201,6 +220,58 @@ public class Program {
 		docVectorsJob.setOutputValueClass(DocVector.class);
 		FileInputFormat.addInputPath(docVectorsJob, wordTFIDFPath);
 		FileOutputFormat.setOutputPath(docVectorsJob, docVectorsPath);
+		
+		//7、生成ID集合
+		Configuration conf7 = new Configuration();
+		Job idSetJob = new Job(conf7, "生成id集合");
+		idSetJob.setJarByClass(IdSetGenerator.class);
+		idSetJob.setMapperClass(IdSetGeneratorMapper.class);
+		idSetJob.setNumReduceTasks(1);
+		idSetJob.setMapOutputKeyClass(LongWritable.class);
+		idSetJob.setMapOutputValueClass(NullWritable.class);
+		idSetJob.setReducerClass(Reducer.class);
+		idSetJob.setOutputKeyClass(LongWritable.class);
+		idSetJob.setOutputValueClass(NullWritable.class);
+		idSetJob.setInputFormatClass(TextInputFormat.class);
+		idSetJob.setOutputFormatClass(TextOutputFormat.class);
+		FileInputFormat.addInputPath(idSetJob, docVectorsPath);
+		FileOutputFormat.setOutputPath(idSetJob, docIdSetPath);
+		
+		//8、生成初始中心文件
+		Configuration conf8 = new Configuration();
+		//上一步生成的id集合文件
+		String docIdSetFile = docIdSetPath + "/part-r-00000";
+		//hdfs上存放初始文档id的文件名
+		String initDocIdFileName = tmpPath + "/8-0-initial-docid";
+		Corpus.generateKInitialCenters(K, totalDocNum, docIdSetFile, initDocIdFileName);
+		//生成的初始文档中心文件放在缓存中
+		Path docIdPath = new Path(initDocIdFileName);
+		DistributedCache.addCacheFile(docIdPath.toUri(), conf8);
+		Job initCentersJob = new Job(conf8, "生成初始中心文件");
+		initCentersJob.setJarByClass(InitialCentersGenerator.class);
+		initCentersJob.setMapOutputKeyClass(CentersMapper.class);
+		initCentersJob.setNumReduceTasks(1);
+		initCentersJob.setMapOutputKeyClass(NullWritable.class);
+		initCentersJob.setMapOutputValueClass(Text.class);
+		initCentersJob.setReducerClass(Reducer.class);
+		initCentersJob.setOutputKeyClass(NullWritable.class);
+		initCentersJob.setOutputValueClass(Text.class);
+		initCentersJob.setInputFormatClass(TextInputFormat.class);
+		initCentersJob.setOutputFormatClass(TextOutputFormat.class);
+		FileInputFormat.addInputPath(initCentersJob, docVectorsPath);
+		FileOutputFormat.setOutputPath(initCentersJob, initialCenterPath);
+		
+		//9、初次聚类
+		Configuration conf9 = new Configuration();
+		String initialCentersFileName = initialCenterPath.toString() + "/part-r-00000";
+		int dimension = Corpus.getDimension(initialCentersFileName);
+		conf9.setInt("dimension", dimension);
+		Path initialCentersFile = new Path(initialCentersFileName);
+		DistributedCache.addCacheFile(initialCentersFile.toUri(), conf9);
+		Job firstKmeansJob = new Job(conf9, "初次聚类");
+		//TODO
+		
+		
 	}
 
 }
