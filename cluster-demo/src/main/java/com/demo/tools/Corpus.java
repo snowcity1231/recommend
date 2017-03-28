@@ -85,5 +85,23 @@ public class Corpus {
 		in.close();
 		return dimension;
 	}
+	
+	/**
+	 * 获取两个向量的欧式距离
+	 * @param source
+	 * @param other
+	 * @return
+	 */
+	public static double getEuclideanDistance(double[] source, double[] other) {
+		double distance = 0.0D;
+		if(source.length != other.length) {
+			return Double.MAX_VALUE;
+		}
+		for(int i=0; i < source.length; i++) {
+			distance += (source[i] - other[i]) * (source[i] - other[i]);
+		}
+		distance = Math.sqrt(distance);
+		return distance;
+	}
 
 }

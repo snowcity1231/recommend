@@ -1,7 +1,5 @@
 package com.demo;
 
-import javax.servlet.jsp.jstl.core.Config;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -22,29 +20,33 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 import com.demo.mapreduce.DocCounts;
-import com.demo.mapreduce.GenerateDocVectors;
-import com.demo.mapreduce.TFCount;
-import com.demo.mapreduce.TFCount.TfCountsMapper;
-import com.demo.mapreduce.TFCount.TfCountsReducer;
-import com.demo.mapreduce.TFIDFCount.TFIDFCountMapper;
-import com.demo.mapreduce.TFIDFCount.TFIDFCountReducer;
-import com.demo.mapreduce.TFIDFCount;
-import com.demo.mapreduce.VocabularySelector;
-import com.demo.mapreduce.VocabularySelector.VocabularyCombine;
-import com.demo.mapreduce.VocabularySelector.VocabularyMapper;
-import com.demo.mapreduce.VocabularySelector.VocabularyReducer;
 import com.demo.mapreduce.DocCounts.DocCountsCombiner;
 import com.demo.mapreduce.DocCounts.DocCountsMapper;
 import com.demo.mapreduce.DocCounts.DocCountsReducer;
+import com.demo.mapreduce.GenerateDocVectors;
 import com.demo.mapreduce.GenerateDocVectors.DocVectorReducer;
 import com.demo.mapreduce.GenerateDocVectors.DocVectorsMapper;
 import com.demo.mapreduce.IdSetGenerator;
 import com.demo.mapreduce.IdSetGenerator.IdSetGeneratorMapper;
-import com.demo.mapreduce.InitialCentersGenerator.CentersMapper;
 import com.demo.mapreduce.InitialCentersGenerator;
+import com.demo.mapreduce.InitialCentersGenerator.CentersMapper;
+import com.demo.mapreduce.KMeansCluster.KmeansCombiner;
+import com.demo.mapreduce.KMeansCluster.KmeansReducer;
+import com.demo.mapreduce.KMeansCluster;
+import com.demo.mapreduce.TFCount;
+import com.demo.mapreduce.TFCount.TfCountsMapper;
+import com.demo.mapreduce.TFCount.TfCountsReducer;
+import com.demo.mapreduce.TFIDFCount;
+import com.demo.mapreduce.TFIDFCount.TFIDFCountMapper;
+import com.demo.mapreduce.TFIDFCount.TFIDFCountReducer;
+import com.demo.mapreduce.VocabularySelector;
+import com.demo.mapreduce.VocabularySelector.VocabularyCombine;
+import com.demo.mapreduce.VocabularySelector.VocabularyMapper;
+import com.demo.mapreduce.VocabularySelector.VocabularyReducer;
 import com.demo.mapreduce.WordCountInDoc;
 import com.demo.mapreduce.WordCountInDoc.WordCountInDocMapper;
 import com.demo.mapreduce.WordCountInDoc.WordCountInDocReducer;
+import com.demo.pojo.DataPro;
 import com.demo.pojo.DocVector;
 import com.demo.tools.CommonUtils;
 import com.demo.tools.Corpus;
@@ -78,7 +80,9 @@ public class Program {
 		Path vocabularyPath = new Path(tmpPath + "/5-vocabulary");	//存放筛选结束的单词列表文件路径
 		Path docVectorsPath = new Path(tmpPath + "/6-doc-vectors");  //存放文档向量文件路径
 		Path docIdSetPath = new Path(tmpPath + "/7-docid-set");	//文档id集合
-		Path initialCenterPath = new Path(tmpPath + "/8-initial-centers");
+		Path initialCenterPath = new Path(tmpPath + "/8-initial-centers");	//初始化聚类中心
+		final String tmpCenter = tmpPath + "/9-tmp-centers/";
+		Path tmpCentersPath = new Path(tmpCenter);
 		
 		//生成聚类数
 		final int K = Integer.parseInt(args[3]);
@@ -114,6 +118,9 @@ public class Program {
 		}
 		if(fs.exists(initialCenterPath)) {
 			fs.delete(initialCenterPath, true);
+		}
+		if(fs.exists(tmpCentersPath)) {
+			fs.delete(tmpCentersPath, true);
 		}
 		
 		//1、计算文档总数
@@ -269,7 +276,24 @@ public class Program {
 		Path initialCentersFile = new Path(initialCentersFileName);
 		DistributedCache.addCacheFile(initialCentersFile.toUri(), conf9);
 		Job firstKmeansJob = new Job(conf9, "初次聚类");
-		//TODO
+		firstKmeansJob.setJarByClass(KMeansCluster.class);
+		firstKmeansJob.setMapOutputKeyClass(IntWritable.class);
+		firstKmeansJob.setMapOutputValueClass(DataPro.class);
+		firstKmeansJob.setNumReduceTasks(1);
+		firstKmeansJob.setCombinerClass(KmeansCombiner.class);
+		firstKmeansJob.setReducerClass(KmeansReducer.class);
+		firstKmeansJob.setOutputKeyClass(NullWritable.class);
+		firstKmeansJob.setOutputValueClass(Text.class);
+		firstKmeansJob.setInputFormatClass(TextInputFormat.class);
+		firstKmeansJob.setOutputFormatClass(TextOutputFormat.class);
+		FileInputFormat.addInputPath(firstKmeansJob, docVectorsPath);
+		FileOutputFormat.setOutputPath(firstKmeansJob, new Path(tmpCenter + 0 + "/"));
+		if(!firstKmeansJob.waitForCompletion(true)) {
+			log.error("初次聚类失败!");
+			System.exit(1);
+		}
+		
+		//TODO 开始遍历
 		
 		
 	}
