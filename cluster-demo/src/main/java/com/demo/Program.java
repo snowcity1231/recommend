@@ -1,9 +1,14 @@
 package com.demo;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.filecache.DistributedCache;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
@@ -30,7 +35,9 @@ import com.demo.mapreduce.IdSetGenerator;
 import com.demo.mapreduce.IdSetGenerator.IdSetGeneratorMapper;
 import com.demo.mapreduce.InitialCentersGenerator;
 import com.demo.mapreduce.InitialCentersGenerator.CentersMapper;
+import com.demo.mapreduce.KMeansCluster.KMeansMapper;
 import com.demo.mapreduce.KMeansCluster.KmeansCombiner;
+import com.demo.mapreduce.KMeansCluster.KmeansLastMapper;
 import com.demo.mapreduce.KMeansCluster.KmeansReducer;
 import com.demo.mapreduce.KMeansCluster;
 import com.demo.mapreduce.TFCount;
@@ -59,6 +66,9 @@ import com.demo.tools.Corpus;
 *  
 */
 public class Program {
+	
+	//设立阙值，如果聚类分析时，两次遍历中心的距离之和小于该阙值，即认为已经无法再聚了，当前的聚类中心就是最后结果
+	private static final double threadHold = 0.0000000000000000001D;	//不好控制
 	
 	private static Log log = LogFactory.getLog(Process.class);
 	
@@ -293,9 +303,115 @@ public class Program {
 			System.exit(1);
 		}
 		
-		//TODO 开始遍历
+		//开始遍历
+		boolean flag = true;
+		int iterNum = 1;
+		while(flag && iterNum < MAX_ITERATIONS) {
+			Configuration conf9_1 = new Configuration();
+			conf9_1.setInt("docDimension", dimension);
+			//设置中心文件路径
+			Path previousCentersFile = new Path(tmpCenter + (iterNum-1) + "/part-r-00000");
+			DistributedCache.addCacheFile(previousCentersFile.toUri(), conf9_1);
+			boolean iterFlag = doIteration(conf9_1, iterNum, docVectorsPath, new Path(tmpCenter + iterNum + "/"));
+			if(!iterFlag) {
+				log.error("遍历过程失败");
+				System.exit(1);
+			}
+			
+			Path oldCentersFile = new Path(tmpCenter + (iterNum - 1) + "/part-r-00000");
+			Path newCentersFile = new Path(tmpCenter + iterNum + "/part-r-00000");
+			FileSystem fs1 = FileSystem.get(oldCentersFile.toUri(), conf9_1);
+			FileSystem fs2 = FileSystem.get(newCentersFile.toUri(), conf9_1);
+			if(!(fs1.exists(oldCentersFile) && fs2.exists(newCentersFile))) {
+				log.error("旧的中心文件与新的中心文件必须同时存在!");
+				System.exit(1);
+			}
+			String line1, line2;
+			FSDataInputStream in1 = fs1.open(oldCentersFile);
+			FSDataInputStream in2 = fs2.open(newCentersFile);
+			InputStreamReader isr1 = new InputStreamReader(in1);
+			InputStreamReader isr2 = new InputStreamReader(in2);
+			BufferedReader br1 = new BufferedReader(isr1);
+			BufferedReader br2 = new BufferedReader(isr2);
+			double error = 0.0D;
+			while((line1 = br1.readLine()) != null && (line2 = br2.readLine()) != null) {
+				String[] str1 = line1.split("\t");
+				String[] str2 = line2.split("\t");
+				for(int i = 0; i < str1.length; i++) {
+					double d1 = Double.parseDouble(str1[i]);
+					double d2 = Double.parseDouble(str2[i]);
+					error += (d1 - d2) * (d1 - d2);
+				}
+			}
+			if(error < threadHold) {
+				flag = false;
+			}
+			iterNum ++;
+		}
 		
-		
+		//对文本聚类
+		Configuration classifyConf = new Configuration();
+		//将聚类中心文件缓存
+		Path lastCentersFile = new Path(tmpCenter + (iterNum - 1) + "/part-r-00000");
+		DistributedCache.addCacheArchive(lastCentersFile.toUri(), classifyConf);
+		doCluster(classifyConf, iterNum, docVectorsPath, outputPath);
+		System.out.println("遍历数：" + iterNum);
+	}
+	
+	/**
+	 * 遍历，找出聚类中心
+	 * @param conf
+	 * @param iterNum
+	 * @param docVectrosPath
+	 * @param tmpCenterPath
+	 * @return
+	 * @throws IOException
+	 * @throws ClassNotFoundException
+	 * @throws InterruptedException
+	 */
+	public static boolean doIteration(Configuration conf, int iterNum, Path docVectrosPath, Path tmpCenterPath) throws IOException, ClassNotFoundException, InterruptedException {
+		boolean flag = false;
+		Job job = new Job(conf, "第" + iterNum + "次遍历聚类");
+		job.setJarByClass(KMeansCluster.class);
+		job.setMapperClass(KMeansMapper.class);
+		job.setMapOutputKeyClass(IntWritable.class);
+		job.setMapOutputValueClass(DataPro.class);
+		job.setNumReduceTasks(1);
+		job.setCombinerClass(KmeansCombiner.class);
+		job.setReducerClass(KmeansReducer.class);
+		job.setOutputKeyClass(NullWritable.class);
+		job.setOutputValueClass(Text.class);
+		job.setInputFormatClass(TextInputFormat.class);
+		job.setOutputFormatClass(TextOutputFormat.class);
+		FileInputFormat.addInputPath(job, docVectrosPath);
+		FileOutputFormat.setOutputPath(job, tmpCenterPath);
+		flag = job.waitForCompletion(true);
+		return flag;
+	}
+	
+	/**
+	 * 对文本进行最终聚类并输出
+	 * @param conf
+	 * @param iterNum
+	 * @param docVectorsPath
+	 * @param finalOutputPath
+	 * @throws IOException 
+	 * @throws InterruptedException 
+	 * @throws ClassNotFoundException 
+	 */
+	public static void doCluster(Configuration conf, int iterNum, Path docVectorsPath, Path finalOutputPath) throws IOException, ClassNotFoundException, InterruptedException {
+		Job job = new Job(conf, "第" + iterNum + "次聚类");
+		job.setJarByClass(KMeansCluster.class);
+		job.setMapperClass(KmeansLastMapper.class);
+		job.setMapOutputKeyClass(LongWritable.class);
+		job.setMapOutputValueClass(IntWritable.class);
+		job.setNumReduceTasks(1);
+		job.setReducerClass(Reducer.class);
+		job.setOutputKeyClass(LongWritable.class);
+		job.setOutputValueClass(IntWritable.class);
+		FileInputFormat.addInputPath(job, docVectorsPath);
+		FileOutputFormat.setOutputPath(job, finalOutputPath);
+		job.waitForCompletion(true);
 	}
 
 }

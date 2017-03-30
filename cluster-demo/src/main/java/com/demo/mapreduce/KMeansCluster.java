@@ -24,7 +24,7 @@ import javafx.scene.chart.PieChart.Data;
 
 /** 
 * @ClassName: KMeansCluster 
-* @Description: TODO
+* @Description: 聚类算法
 * @author xuechen
 * @date 2017年3月17日 下午4:56:13
 *  
@@ -176,6 +176,74 @@ public class KMeansCluster {
 	 * 样本中心收敛（或停止迭代）后，给各网页标号
 	 */
 	public static class KmeansLastMapper extends Mapper<LongWritable, Text, LongWritable, IntWritable> {
-		//TODO
+		
+		private static Log log = LogFactory.getLog(KmeansLastMapper.class);
+		
+		private int dimention_m;	//聚类数
+		private int dimention_n;	//特征词数，即维度
+		private double[][] centers;
+
+		@Override
+		protected void setup(Mapper<LongWritable, Text, LongWritable, IntWritable>.Context context)
+				throws IOException, InterruptedException {
+			Path[] caches = DistributedCache.getFileClassPaths(context.getConfiguration());
+			if (caches == null || caches.length <= 0) {
+				log.error("聚类中心文件不存在");
+				System.exit(1);
+			}
+			BufferedReader br = new BufferedReader(new FileReader(caches[0].toString()));
+			List<ArrayList<Double>> tmpCenters = new ArrayList<>();
+			ArrayList<Double> center = null;
+			String line;
+			while((line = br.readLine()) != null) {
+				center = new ArrayList<>();
+				String[] str = line.trim().split("\t");
+				for(int i=0; i<str.length; i++) {
+					center.add(Double.parseDouble(str[i]));
+				}
+				tmpCenters.add(center);
+			}
+			br.close();
+			//将所有聚类中心转为二维数组
+			@SuppressWarnings("unchecked")
+			ArrayList<Double>[] newCenters = tmpCenters.toArray(new ArrayList[] {});
+			dimention_m = tmpCenters.size();
+			dimention_n = newCenters[0].size();
+			for(int i = 0; i < dimention_m; i++) {
+				Double[] tmpDouble = newCenters[i].toArray(new Double[]{});
+				for(int j=0; j < dimention_n; i++) {
+					centers[i][j] = tmpDouble[j];
+				}
+			}
+		}
+
+		/**
+		 * 输入：key为行偏移量，value为docId	docVectors
+		 */
+		@Override
+		protected void map(LongWritable key, Text value,
+				Mapper<LongWritable, Text, LongWritable, IntWritable>.Context context)
+				throws IOException, InterruptedException {
+			String[] strs = value.toString().trim().split("\t");
+			LongWritable docId = new LongWritable(Long.parseLong(strs[0]));
+			double[] tmpDouble = new double[strs.length - 1];
+			for(int i=0; i<tmpDouble.length; i++) {
+				tmpDouble[i] = Double.parseDouble(strs[i+1]);
+			}
+			//判断属于哪一个聚类
+			double distance = Double.MAX_VALUE;
+			double tmpDistance = 0.0D;
+			int clusterId = 0;
+			for(int i=0; i < dimention_m; i++) {
+				double[] tmpCenter = centers[i];
+				tmpDistance = Corpus.getEuclideanDistance(tmpCenter, tmpDouble);
+				if(tmpDistance < distance) {
+					clusterId = i;
+					distance = tmpDistance;
+				}
+			}
+			context.write(docId, new IntWritable(clusterId));
+		}
+		
 	}
 }
