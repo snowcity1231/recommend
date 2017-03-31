@@ -2,6 +2,8 @@ package com.demo.mapreduce;
 
 import java.io.IOException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
@@ -19,12 +21,14 @@ public class DocCounts {
 	
 	public static class DocCountsMapper extends Mapper<LongWritable, Text, LongWritable, LongWritable> {
 		
+		private final Log log = LogFactory.getLog(DocCountsMapper.class);
 		private final LongWritable one = new LongWritable(1);
 
 		@Override
 		protected void map(LongWritable key, Text value,
 				Mapper<LongWritable, Text, LongWritable, LongWritable>.Context context)
 				throws IOException, InterruptedException {
+			log.info("start count doc number...");
 			//每统计一篇文档，计数+1
 			context.write(one, one);
 		}

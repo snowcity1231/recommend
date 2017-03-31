@@ -22,7 +22,11 @@ public class DataPro implements Writable{
 	//属于簇中的样本数
 	private IntWritable count;
 
-	
+	public DataPro() {
+		this.centerSum = new Text();
+		this.count = new IntWritable();
+	}
+
 	/**
 	 * @param centerSum
 	 * @param count

@@ -59,7 +59,7 @@ public class GenerateDocVectors {
 		protected void setup(Reducer<LongWritable, Text, NullWritable, DocVector>.Context context)
 				throws IOException, InterruptedException {
 			BufferedReader br = null;
-			Path[] caches = DistributedCache.getLocalCacheArchives(context.getConfiguration());
+			Path[] caches = DistributedCache.getLocalCacheFiles(context.getConfiguration());
 			if(caches == null || caches.length <= 0) {
 				System.out.println("No DistributedCach keywords File");
 				System.exit(1);

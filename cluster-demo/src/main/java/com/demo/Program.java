@@ -87,7 +87,8 @@ public class Program {
 		Path wordCountInDocPath = new  Path(tmpPath + "/2-word-count-in-doc");	//单词在文档中出现次数
 		Path wordTfPath = new Path(tmpPath + "/3-word-tf");		//每篇文档中单词tf路径
 		Path wordTFIDFPath = new Path(tmpPath + "/4-word-tfidf");	//每篇文档中每个单词的tfidf路径
-		Path vocabularyPath = new Path(tmpPath + "/5-vocabulary");	//存放筛选结束的单词列表文件路径
+		String vocabularyFile = tmpPath + "/5-vocabulary";
+		Path vocabularyPath = new Path(vocabularyFile);	//存放筛选结束的单词列表文件路径
 		Path docVectorsPath = new Path(tmpPath + "/6-doc-vectors");  //存放文档向量文件路径
 		Path docIdSetPath = new Path(tmpPath + "/7-docid-set");	//文档id集合
 		Path initialCenterPath = new Path(tmpPath + "/8-initial-centers");	//初始化聚类中心
@@ -132,6 +133,8 @@ public class Program {
 		if(fs.exists(tmpCentersPath)) {
 			fs.delete(tmpCentersPath, true);
 		}
+		
+		log.info("输入路径：" + inputPath);
 		
 		//1、计算文档总数
 		Configuration conf1 = new Configuration();
@@ -195,13 +198,15 @@ public class Program {
 		countWordTFIDFJob.setMapperClass(TFIDFCountMapper.class);
 		countWordTFIDFJob.setReducerClass(TFIDFCountReducer.class);
 		countWordTFIDFJob.setMapOutputKeyClass(Text.class);
-		countWordTFIDFJob.setOutputValueClass(Text.class);
+		countWordTFIDFJob.setMapOutputValueClass(Text.class);
 		countWordTFIDFJob.setOutputKeyClass(Text.class);
 		countWordTFIDFJob.setOutputValueClass(DoubleWritable.class);
 		countWordTFIDFJob.setInputFormatClass(TextInputFormat.class);
 		countWordTFIDFJob.setOutputFormatClass(TextOutputFormat.class);
 		TextInputFormat.addInputPath(countWordTFIDFJob, wordTfPath);
 		TextOutputFormat.setOutputPath(countWordTFIDFJob, wordTFIDFPath);
+		
+		countWordTFIDFJob.waitForCompletion(true);
 		
 		//5、根据单词的TFIDF值筛选单词，用于生成向量
 		Configuration conf5 = new Configuration();
@@ -220,11 +225,14 @@ public class Program {
 		FileInputFormat.addInputPath(vocabularySelectorJob, wordTFIDFPath);
 		FileOutputFormat.setOutputPath(vocabularySelectorJob, vocabularyPath);
 		
+		vocabularySelectorJob.waitForCompletion(true);
+		
 		//6、生成文档向量
 		Configuration conf6 = new Configuration();
-		Path vocabularyFilePath = new Path(vocabularyPath + "/part-r-00000");
 		//关键词列表文件放到缓存中
-		DistributedCache.addCacheFile(vocabularyFilePath.toUri(), conf6);
+		Path vocaFilePath = new Path(vocabularyFile + "/part-r-00000");
+		log.info("关键词列表文件：" + vocabularyPath.toString());
+		DistributedCache.addCacheFile(vocaFilePath.toUri(), conf6);
 		Job docVectorsJob = new Job(conf6, "生成文档向量");
 		docVectorsJob.setJarByClass(GenerateDocVectors.class);
 		docVectorsJob.setMapperClass(DocVectorsMapper.class);
@@ -237,6 +245,8 @@ public class Program {
 		docVectorsJob.setOutputValueClass(DocVector.class);
 		FileInputFormat.addInputPath(docVectorsJob, wordTFIDFPath);
 		FileOutputFormat.setOutputPath(docVectorsJob, docVectorsPath);
+		
+		docVectorsJob.waitForCompletion(true);
 		
 		//7、生成ID集合
 		Configuration conf7 = new Configuration();
@@ -254,10 +264,13 @@ public class Program {
 		FileInputFormat.addInputPath(idSetJob, docVectorsPath);
 		FileOutputFormat.setOutputPath(idSetJob, docIdSetPath);
 		
+		idSetJob.waitForCompletion(true);
+		
 		//8、生成初始中心文件
 		Configuration conf8 = new Configuration();
 		//上一步生成的id集合文件
-		String docIdSetFile = docIdSetPath + "/part-r-00000";
+		String docIdSetFile = docIdSetPath.toString() + "/part-r-00000";
+		log.info("id集合文件：" + docIdSetFile);
 		//hdfs上存放初始文档id的文件名
 		String initDocIdFileName = tmpPath + "/8-0-initial-docid";
 		Corpus.generateKInitialCenters(K, totalDocNum, docIdSetFile, initDocIdFileName);
@@ -266,7 +279,7 @@ public class Program {
 		DistributedCache.addCacheFile(docIdPath.toUri(), conf8);
 		Job initCentersJob = new Job(conf8, "生成初始中心文件");
 		initCentersJob.setJarByClass(InitialCentersGenerator.class);
-		initCentersJob.setMapOutputKeyClass(CentersMapper.class);
+		initCentersJob.setMapperClass(CentersMapper.class);
 		initCentersJob.setNumReduceTasks(1);
 		initCentersJob.setMapOutputKeyClass(NullWritable.class);
 		initCentersJob.setMapOutputValueClass(Text.class);
@@ -278,6 +291,8 @@ public class Program {
 		FileInputFormat.addInputPath(initCentersJob, docVectorsPath);
 		FileOutputFormat.setOutputPath(initCentersJob, initialCenterPath);
 		
+		initCentersJob.waitForCompletion(true);
+		
 		//9、初次聚类
 		Configuration conf9 = new Configuration();
 		String initialCentersFileName = initialCenterPath.toString() + "/part-r-00000";
@@ -287,6 +302,7 @@ public class Program {
 		DistributedCache.addCacheFile(initialCentersFile.toUri(), conf9);
 		Job firstKmeansJob = new Job(conf9, "初次聚类");
 		firstKmeansJob.setJarByClass(KMeansCluster.class);
+		firstKmeansJob.setMapperClass(KMeansMapper.class);
 		firstKmeansJob.setMapOutputKeyClass(IntWritable.class);
 		firstKmeansJob.setMapOutputValueClass(DataPro.class);
 		firstKmeansJob.setNumReduceTasks(1);
@@ -353,7 +369,7 @@ public class Program {
 		Configuration classifyConf = new Configuration();
 		//将聚类中心文件缓存
 		Path lastCentersFile = new Path(tmpCenter + (iterNum - 1) + "/part-r-00000");
-		DistributedCache.addCacheArchive(lastCentersFile.toUri(), classifyConf);
+		DistributedCache.addCacheFile(lastCentersFile.toUri(), classifyConf);
 		doCluster(classifyConf, iterNum, docVectorsPath, outputPath);
 		System.out.println("遍历数：" + iterNum);
 	}

@@ -44,7 +44,7 @@ public class KMeansCluster {
 		@Override
 		protected void setup(Mapper<LongWritable, Text, IntWritable, DataPro>.Context context)
 				throws IOException, InterruptedException {
-			Path[] caches = DistributedCache.getLocalCacheArchives(context.getConfiguration());
+			Path[] caches = DistributedCache.getLocalCacheFiles(context.getConfiguration());
 			if(caches == null || caches.length <= 0) {
 				log.error("center file does not exsit!");
 				System.exit(1);

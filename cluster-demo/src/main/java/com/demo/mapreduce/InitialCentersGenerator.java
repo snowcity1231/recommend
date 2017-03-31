@@ -34,7 +34,7 @@ public class InitialCentersGenerator {
 		protected void setup(Mapper<LongWritable, Text, NullWritable, Text>.Context context)
 				throws IOException, InterruptedException {
 			DataInputStream dis = null;
-			Path[] caches = DistributedCache.getLocalCacheArchives(context.getConfiguration());
+			Path[] caches = DistributedCache.getLocalCacheFiles(context.getConfiguration());
 			if(caches == null && caches.length <= 0) {
 				System.out.println("No Cache DocId File");
 				System.exit(1);;

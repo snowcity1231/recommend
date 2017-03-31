@@ -54,7 +54,7 @@ public class TFIDFCount {
 		protected void reduce(Text key, Iterable<Text> values, Reducer<Text, Text, Text, DoubleWritable>.Context context)
 				throws IOException, InterruptedException {
 			//从配置中获取文档总数
-			Long totalDocNumber = context.getConfiguration().getLong("totalDocNumber", 0);
+			Long totalDocNum = context.getConfiguration().getLong("totalDocNum", 0);
 			//包含当前单词(key)的文章数
 			int docNumbersIncludeKey = 0;
 			//存放该单词在每篇文章的频率，key为docId，value为TF
@@ -79,13 +79,13 @@ public class TFIDFCount {
 				Double wordNumInDoc = Double.valueOf(wordFrequency[0]);	//单词出现次数
 				Double totalInDoc = Double.valueOf(wordFrequency[1]);	//文档单词总次数
 				//计算TF
-				double tf = Double.valueOf(wordNumInDoc / totalDocNumber);
+				double tf = Double.valueOf(wordNumInDoc / totalInDoc);
 				//计算IDF
 				//单词出现的此处如果为0，则取1，除数不能为0
 				if(docNumbersIncludeKey == 0) {
 					docNumbersIncludeKey = 1;
 				}
-				double idf = Math.log10((double) totalDocNumber / (double) docNumbersIncludeKey);
+				double idf = Math.log10((double) totalDocNum / (double) docNumbersIncludeKey);
 				double tfidf = tf * idf;
 				
 				this.wordAtDoc.set(key + "@" + documentId);
