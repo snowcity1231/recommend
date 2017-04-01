@@ -297,7 +297,7 @@ public class Program {
 		Configuration conf9 = new Configuration();
 		String initialCentersFileName = initialCenterPath.toString() + "/part-r-00000";
 		int dimension = Corpus.getDimension(initialCentersFileName);
-		conf9.setInt("dimension", dimension);
+		conf9.setInt("docDimension", dimension);
 		Path initialCentersFile = new Path(initialCentersFileName);
 		DistributedCache.addCacheFile(initialCentersFile.toUri(), conf9);
 		Job firstKmeansJob = new Job(conf9, "初次聚类");
@@ -369,7 +369,9 @@ public class Program {
 		Configuration classifyConf = new Configuration();
 		//将聚类中心文件缓存
 		Path lastCentersFile = new Path(tmpCenter + (iterNum - 1) + "/part-r-00000");
+		log.info("最终聚类中心文件：" + tmpCenter + (iterNum - 1) + "/part-r-00000");
 		DistributedCache.addCacheFile(lastCentersFile.toUri(), classifyConf);
+		log.info("开始最终聚类");
 		doCluster(classifyConf, iterNum, docVectorsPath, outputPath);
 		System.out.println("遍历数：" + iterNum);
 	}

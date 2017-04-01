@@ -186,32 +186,45 @@ public class KMeansCluster {
 		@Override
 		protected void setup(Mapper<LongWritable, Text, LongWritable, IntWritable>.Context context)
 				throws IOException, InterruptedException {
-			Path[] caches = DistributedCache.getFileClassPaths(context.getConfiguration());
+			Path[] caches = DistributedCache.getLocalCacheFiles(context.getConfiguration());
 			if (caches == null || caches.length <= 0) {
 				log.error("聚类中心文件不存在");
 				System.exit(1);
 			}
 			BufferedReader br = new BufferedReader(new FileReader(caches[0].toString()));
-			List<ArrayList<Double>> tmpCenters = new ArrayList<>();
+			List<ArrayList<Double>> tmpCenters = new ArrayList<ArrayList<Double>>();
 			ArrayList<Double> center = null;
 			String line;
-			while((line = br.readLine()) != null) {
-				center = new ArrayList<>();
+			while ((line = br.readLine()) != null) {
+				center = new ArrayList<Double>();
 				String[] str = line.trim().split("\t");
-				for(int i=0; i<str.length; i++) {
+				for (int i = 0; i < str.length; i++) {
 					center.add(Double.parseDouble(str[i]));
 				}
 				tmpCenters.add(center);
 			}
 			br.close();
 			//将所有聚类中心转为二维数组
+//			@SuppressWarnings("unchecked")
+//			ArrayList<Double>[] newCenters = tmpCenters
+//			.toArray(new ArrayList[] {});
+//			dimention_m = tmpCenters.size();
+//			dimention_n = newCenters[0].size();
+//			centers = new double[dimention_m][dimention_n];
+//			for (int i = 0; i < dimention_m; i++) {
+//				Double[] temp_double = newCenters[i].toArray(new Double[] {});
+//				for (int j = 0; j < dimention_n; j++) {
+//					centers[i][j] = temp_double[j];
+//				}
+//			}
 			@SuppressWarnings("unchecked")
 			ArrayList<Double>[] newCenters = tmpCenters.toArray(new ArrayList[] {});
 			dimention_m = tmpCenters.size();
 			dimention_n = newCenters[0].size();
-			for(int i = 0; i < dimention_m; i++) {
-				Double[] tmpDouble = newCenters[i].toArray(new Double[]{});
-				for(int j=0; j < dimention_n; i++) {
+			centers = new double[dimention_m][dimention_n];
+			for (int i = 0; i < dimention_m; i++) {
+				Double[] tmpDouble = newCenters[i].toArray(new Double[] {});
+				for (int j = 0; j < dimention_n; j++) {
 					centers[i][j] = tmpDouble[j];
 				}
 			}

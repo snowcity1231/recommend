@@ -8,44 +8,38 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
-/** 
-* @ClassName: DataPro 
-* @Description: TODO
-* @author xuechen
-* @date 2017年3月17日 下午4:58:20
-*  
-*/
-public class DataPro implements Writable{
-	
-	//局部样本中心
-	private Text centerSum;
-	//属于簇中的样本数
-	private IntWritable count;
+public class DataPro implements Writable {
 
-	public DataPro() {
+	private Text centerSum; //局部样本中心(累和sum)
+	private IntWritable count;		//属于簇中的样本数
+	
+	
+	public DataPro(){
 		this.centerSum = new Text();
 		this.count = new IntWritable();
 	}
-
 	/**
-	 * @param centerSum
+	 * @param vec
 	 * @param count
 	 */
 	public DataPro(Text centerSum, IntWritable count) {
+		super();
 		this.centerSum = centerSum;
 		this.count = count;
 	}
-
+	
 	@Override
-	public void readFields(DataInput input) throws IOException {
-		this.centerSum.readFields(input);
-		this.count.readFields(input);
+	public void readFields(DataInput arg0) throws IOException {
+		// TODO Auto-generated method stub
+		this.centerSum.readFields(arg0);
+		this.count.readFields(arg0);
 	}
 
 	@Override
-	public void write(DataOutput output) throws IOException {
-		this.centerSum.write(output);
-		this.count.write(output);
+	public void write(DataOutput arg0) throws IOException {
+		// TODO Auto-generated method stub
+		this.centerSum.write(arg0);
+		this.count.write(arg0);
 	}
 
 	/**
@@ -75,5 +69,4 @@ public class DataPro implements Writable{
 	public void setCount(IntWritable count) {
 		this.count = count;
 	}
-
 }
